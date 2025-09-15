@@ -1,5 +1,5 @@
 name: fpga
-      curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}"
+
 on:
   push:
     # Comment out (or remove) the following line to run the FPGA workflow on every push:
@@ -17,8 +17,3 @@ jobs:
 
       - name: FPGA bitstream for TT ASIC Sim (ICE40UP5K)
         uses: TinyTapeout/tt-gds-action/fpga/ice40up5k@ttsky25a
-
-
-
-
-        curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}"

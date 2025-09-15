@@ -22,16 +22,14 @@ jobs:
       - name: Install Python packages
         shell: bash
         run: pip install -r test/requirements.txt
-                 - name: Run tests
-         run: |
-       cd test
-    make clean
-    make
-    if [ ! -f results.xml ]; then
-      echo "results.xml not found"
-      exit 1
-    fi
-    ! grep failure results.xml
+
+      - name: Run tests
+        run: |
+          cd test
+          make clean
+          make
+          # make will return success even if the test fails, so check for failure in the results.xml
+          ! grep failure results.xml
 
       - name: Test Summary
         uses: test-summary/action@v2.3

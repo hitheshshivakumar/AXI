@@ -108,6 +108,9 @@ module tb;
         end
 
         repeat (5) @(posedge clk);
-        $finish;
+        initial begin
+        #1000;  // or repeat(200) @(posedge clk);
+        $display("Simulation done");
+        end
     end
 endmodule

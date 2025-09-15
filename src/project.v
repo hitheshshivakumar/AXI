@@ -22,34 +22,31 @@ module tt_um_axi8_lite_proc (
     input  wire       rst_n     // async reset, active low
 );
 
-    // Map TinyTapeout pins to simplified AXI-Lite
+    // Map TinyTapeout pins to simplified AXI-Lite signals (single-bit fields)
     wire        AWVALID = ui_in[0];
     wire        ARVALID = ui_in[1];
     wire        WVALID  = ui_in[2];
     wire        RREADY  = ui_in[3];
     wire        BREADY  = ui_in[4];
-    wire [0:0]  ADDR    = ui_in[5];  // 1-bit address (0 or 1)
+    wire [0:0]  ADDR    = { ui_in[5] };  // 1-bit address (0 or 1)
     wire        WSTRB   = ui_in[6];
 
-    // Data bus:
-    //  - On write: master drives uio_in = WDATA
-    //  - On read:  slave drives uio_out = RDATA and sets uio_oe = 0xFF
+    // Data bus: master drives uio_in -> WDATA
     wire [7:0] WDATA = uio_in;
     wire [7:0] RDATA;
-    wire       drive_read_bus;
 
-    // AXI-lite slave internal signals
-    wire       AWREADY, WREADY, BVALID, ARREADY, RVALID;
-    wire [1:0] BRESP, RRESP;
+    // AXI-lite slave internal signals (connected to instance)
+    wire        AWREADY, WREADY, BVALID, ARREADY, RVALID;
+    wire [1:0]  BRESP, RRESP;
 
     // Active-low reset from harness
     wire ARESETN = rst_n;
 
-    // Instantiate the minimal AXI-Lite 8-bit slave
+    // Instantiate the minimal AXI-Lite 8-bit slave (keeps your original implementation)
     tiny_axi_lite_8bit #(
         .ADDR_WIDTH(1),
         .DATA_WIDTH(8)
-    ) dut (
+    ) dut_axi (
         .ACLK   (clk),
         .ARESETN(ARESETN),
 
@@ -60,7 +57,7 @@ module tt_um_axi8_lite_proc (
         .WVALID (WVALID),
         .WREADY (WREADY),
         .WDATA  (WDATA),
-        .WSTRB  (WSTRB),
+        .WSTRB  ({WSTRB}),
 
         .BVALID (BVALID),
         .BREADY (BREADY),
@@ -75,22 +72,10 @@ module tt_um_axi8_lite_proc (
         .RDATA  (RDATA),
         .RRESP  (RRESP)
     );
-initial begin
-    uio_oe=0;
-    data_out=0;
-end
-    always@(posedge clk or posedge reset)
-        begin
-            if(reset)
-                begin
-                    uio_oe<=0;
-                    data_out<=0;
-                end else if (RVALID) begin
-                     uio_oe<=8'hFF;
-                    data_out<=expected_value;
-                end
-    // Drive the bidirectional IOs only when enabled and returning read data
-    assign drive_read_bus = ena & RVALID;     // drive only in read-data phase
+
+    // Drive the bidirectional IOs only when enabled and during read-data valid
+    wire drive_read_bus = ena & RVALID;
+
     assign uio_out = drive_read_bus ? RDATA : 8'h00;
     assign uio_oe  = drive_read_bus ? 8'hFF  : 8'h00;
 
@@ -102,6 +87,7 @@ end
     end
 
     // Outputs masked by ena (best practice for TinyTapeout)
+    // Map status signals into uo_out for debug/observability
     assign uo_out[0] = ena ? AWREADY      : 1'b0;
     assign uo_out[1] = ena ? WREADY       : 1'b0;
     assign uo_out[2] = ena ? BVALID       : 1'b0;
@@ -112,6 +98,7 @@ end
     assign uo_out[7] = ena ? hb[23]       : 1'b0; // slow heartbeat
 
 endmodule
+
 
 // ------------------------------------------------------------
 // Simplified AXI4-Lite 8-bit slave (single-beat, 2 registers)
@@ -162,16 +149,19 @@ module tiny_axi_lite_8bit #(
     reg [DATA_WIDTH-1:0] reg_out;
 
     // Write FSM
-    localparam WIDLE = 2'd0, WDATA_S = 2'd1, WRESP = 2'd2;
+    localparam WIDLE  = 2'd0,
+               WDATA_S = 2'd1,
+               WRESP  = 2'd2;
     reg [1:0] wstate;
     reg       awaddr_q;
 
     // Read FSM
-    localparam RIDLE = 1'b0, RDATA_S = 1'b1;
+    localparam RIDLE  = 1'b0,
+               RDATA_S = 1'b1;
     reg       rstate;
     reg       araddr_q;
 
-    // Combinational handshakes
+    // Combinational handshakes (combinationally drive ready/valid)
     always @(*) begin
         AWREADY = (wstate == WIDLE);
         WREADY  = (wstate == WDATA_S);
@@ -181,7 +171,7 @@ module tiny_axi_lite_8bit #(
         RVALID  = (rstate == RDATA_S);
     end
 
-    // Write channel
+    // Write channel (sequential)
     always @(posedge ACLK or negedge ARESETN) begin
         if (!ARESETN) begin
             wstate   <= WIDLE;
@@ -218,7 +208,17 @@ module tiny_axi_lite_8bit #(
         end
     end
 
-    // Read channel
+    // Provide BVALID behavior (simple single-cycle handshake)
+    // BVALID is already set combinationally above; ensure BVALID clears when accepted
+    always @(posedge ACLK or negedge ARESETN) begin
+        if (!ARESETN) begin
+            // nothing else needed; combinational logic handles BVALID
+        end else begin
+            // When in WRESP state and BREADY is seen, wstate transitions above clear BVALID
+        end
+    end
+
+    // Read channel (sequential)
     always @(posedge ACLK or negedge ARESETN) begin
         if (!ARESETN) begin
             rstate   <= RIDLE;
@@ -241,4 +241,7 @@ module tiny_axi_lite_8bit #(
             endcase
         end
     end
+
 endmodule
+
+`default_nettype wire

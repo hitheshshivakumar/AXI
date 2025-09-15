@@ -109,6 +109,6 @@ module tb;
 
         repeat (5) @(posedge clk);
         $display("Simulation done");
-        $finish;
+        //$finish;
     end
 endmodule
